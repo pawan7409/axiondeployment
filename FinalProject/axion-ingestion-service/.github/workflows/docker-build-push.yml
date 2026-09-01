@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/axion
   workflow_dispatch:
 
 env:
