@@ -11,8 +11,10 @@ spec:
       labels:
         app: axion-ingestion-service
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: axion-ingestion-service
-        image: acrmicrodev567.azurecr.io/ingestion:v1
+        image: axionprojectregistry.azurecr.io/ingestion:v1
         ports:
         - containerPort: 8000

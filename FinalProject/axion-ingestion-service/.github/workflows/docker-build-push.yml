@@ -6,11 +6,15 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_IMAGE: devopsinsiders/axion-ingestion-service
+  ACR_REGISTRY: axionprojectregistry.azurecr.io
+  IMAGE_NAME: ingestion
+  AKS_RESOURCE_GROUP: pawan-rg
+  AKS_CLUSTER_NAME: axionproject
+  K8S_NAMESPACE: default
 
 jobs:
   build-and-push:
-    name: Build & Push to Docker Hub
+    name: Build, Push & Deploy to AKS
     runs-on: ubuntu-latest
 
     steps:
@@ -20,17 +24,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to Azure Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKER_IMAGE }}
+          images: ${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
@@ -38,9 +43,36 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./FinalProject/axion-ingestion-service
+          file: ./FinalProject/axion-ingestion-service/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
+
+      - name: Create ACR pull secret
+        run: |
+          kubectl create secret docker-registry acr-secret \
+            --namespace ${{ env.K8S_NAMESPACE }} \
+            --docker-server=${{ env.ACR_REGISTRY }} \
+            --docker-username=${{ secrets.ACR_USERNAME }} \
+            --docker-password=${{ secrets.ACR_PASSWORD }} \
+            --docker-email=admin@local \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f ./FinalProject/axion-ingestion-service/manifests/deployment.yaml -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/axion-ingestion-service -n ${{ env.K8S_NAMESPACE }} --timeout=180s
