@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 
 env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
   ACR_REGISTRY: axionprojectregistry.azurecr.io
   IMAGE_NAME: ingestion
   AKS_RESOURCE_GROUP: pawan-rg
@@ -56,7 +57,9 @@ jobs:
       - name: Azure login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Set AKS context
         uses: azure/aks-set-context@v3
