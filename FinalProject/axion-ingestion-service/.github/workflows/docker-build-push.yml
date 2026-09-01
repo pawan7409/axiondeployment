@@ -2,7 +2,8 @@ name: Build & Push Docker Image
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -63,16 +64,18 @@ jobs:
           cluster-name: ${{ env.AKS_CLUSTER_NAME }}
 
       - name: Create ACR pull secret
+        shell: bash
         run: |
           kubectl create secret docker-registry acr-secret \
-            --namespace ${{ env.K8S_NAMESPACE }} \
-            --docker-server=${{ env.ACR_REGISTRY }} \
-            --docker-username=${{ secrets.ACR_USERNAME }} \
-            --docker-password=${{ secrets.ACR_PASSWORD }} \
-            --docker-email=admin@local \
+            --namespace "${{ env.K8S_NAMESPACE }}" \
+            --docker-server="${{ env.ACR_REGISTRY }}" \
+            --docker-username="${{ secrets.ACR_USERNAME }}" \
+            --docker-password="${{ secrets.ACR_PASSWORD }}" \
+            --docker-email="admin@local" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to Kubernetes
+        shell: bash
         run: |
-          kubectl apply -f ./FinalProject/axion-ingestion-service/manifests/deployment.yaml -n ${{ env.K8S_NAMESPACE }}
-          kubectl rollout status deployment/axion-ingestion-service -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+          kubectl apply -f ./FinalProject/axion-ingestion-service/manifests/deployment.yaml -n "${{ env.K8S_NAMESPACE }}"
+          kubectl rollout status deployment/axion-ingestion-service -n "${{ env.K8S_NAMESPACE }}" --timeout=180s
