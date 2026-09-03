@@ -1,223 +1,161 @@
-# 🚀 Axion Ingestion Service
+# Axion Deployment Project
 
-A high-performance **FastAPI** microservice that ingests real-time telemetry data from industrial refinery devices and persists it to **PostgreSQL**. Part of the **Axion** platform for industrial IoT monitoring and analytics.
+This repository contains the Axion telemetry ingestion service and the deployment pipeline for shipping it to Azure Kubernetes Service (AKS) through Azure Container Registry (ACR).
 
----
+## Architecture Overview
 
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Local Setup](#local-setup)
-  - [Docker](#docker)
-- [API Reference](#api-reference)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [License](#license)
-
----
-
-## Overview
-
-The Axion Ingestion Service acts as the **entry point** for all telemetry data flowing from refinery devices (motors, pumps, etc.) into the Axion platform. It exposes REST endpoints to:
-
-- **Ingest** telemetry readings (temperature, vibration, current) from devices.
-- **Query** recent telemetry records with optional device-level filtering.
-- **Health-check** for liveness/readiness probes in orchestrated environments.
-
----
-
-## Architecture
-
-```
-┌────────────────┐        POST /api/v1/telemetry/ingest        ┌──────────────────────┐
-│  Refinery       │ ──────────────────────────────────────────► │  Axion Ingestion     │
-│  Devices        │                                             │  Service (FastAPI)   │
-│  (IoT Sensors)  │ ◄────────────────────────────────────────── │                      │
-└────────────────┘        { status: "accepted", id: "..." }     └──────────┬───────────┘
-                                                                           │
-                                                                           │ asyncpg
-                                                                           ▼
-                                                                ┌──────────────────────┐
-                                                                │  PostgreSQL          │
-                                                                │  (axiondb)           │
-                                                                └──────────────────────┘
+```text
+Developer
+   |
+   v
+GitHub Repository
+   |
+   v
+GitHub Actions CI/CD
+   |
+   +--> Prisma Cloud Security Scan
+   |       |
+   |       +--> Vulnerability found? Yes -> fail pipeline
+   |                                  No  -> continue
+   |
+   v
+Docker Build
+   |
+   v
+Azure Container Registry (ACR)
+   |
+   v
+Azure Kubernetes Service (AKS)
+   |
+   +--> Prometheus (metrics collection)
+   |
+   +--> Grafana (visualization)
+   |
+   v
+Pods / Nodes / Application Health
 ```
 
----
+## Repository Structure
 
-## Tech Stack
+```text
+axiondeployment/
+├── .github/
+│   └── workflows/
+│       └── docker-build-push.yml
+├── FinalProject/
+│   └── axion-ingestion-service/
+│       ├── .github/
+│       ├── .env.example
+│       ├── Dockerfile
+│       ├── README.md
+│       ├── config.py
+│       ├── database.py
+│       ├── main.py
+│       ├── models.py
+│       ├── requirements.txt
+│       ├── manifests/
+│       │   ├── deployment.yaml
+│       │   ├── service.yaml
+│       │   └── monitoring/
+│       │       ├── prometheus-config.yaml
+│       │       └── grafana-datasource.yaml
+│       └── Terraform/
+├── README.md
+└── .gitignore
+```
 
-| Layer         | Technology                                      |
-|---------------|--------------------------------------------------|
-| **Framework** | [FastAPI](https://fastapi.tiangolo.com/) 0.115   |
-| **Server**    | [Uvicorn](https://www.uvicorn.org/) 0.30         |
-| **Database**  | PostgreSQL with [asyncpg](https://github.com/MagicStack/asyncpg) 0.30 (async connection pool) |
-| **Validation**| [Pydantic v2](https://docs.pydantic.dev/) 2.9    |
-| **Container** | Docker (Python 3.12-slim)                        |
+## Current Application
 
----
+The service is a FastAPI application that:
 
-## Getting Started
+- accepts telemetry payloads from industrial devices
+- validates data and stores it into PostgreSQL
+- exposes `/health` for liveness/readiness checks
+- exposes telemetry endpoints for querying recent events
 
-### Prerequisites
+## CI/CD Pipeline
 
-- **Python 3.12+**
-- **PostgreSQL** instance with a `telemetry` table (see [axion-database-schema](https://github.com/devopsinsiders/axion-database-schema) for the schema)
-- **Docker** (optional, for containerized deployment)
+The GitHub workflow in .github/workflows/docker-build-push.yml does the following:
 
-### Local Setup
+1. triggers on push to `main` or `feature/axion`
+2. runs a Prisma Cloud security scan before build
+3. builds the Docker image from the ingestion service folder
+4. pushes the image to ACR
+5. authenticates to Azure using service principal credentials
+6. deploys the app to AKS
+7. waits for the rollout to complete
 
-1. **Clone the repository**
+## Required GitHub Secrets
 
-   ```bash
-   git clone https://github.com/devopsinsiders/axion-ingestion-service.git
-   cd axion-ingestion-service
-   ```
+Set these repository secrets before running the workflow:
 
-2. **Create a virtual environment**
+- `AZURE_CREDENTIALS`
+- `ACR_USERNAME`
+- `ACR_PASSWORD`
+- `PRISMA_CLOUD_URL` (optional if scan is disabled)
+- `PRISMA_CLOUD_USER` (optional if scan is disabled)
+- `PRISMA_CLOUD_PASSWORD` (optional if scan is disabled)
 
-   ```bash
-   python -m venv venv
-   source venv/bin/activate    # Linux/macOS
-   venv\Scripts\activate       # Windows
-   ```
+Example `AZURE_CREDENTIALS` JSON:
 
-3. **Install dependencies**
+```json
+{
+  "clientId": "<app-client-id>",
+  "clientSecret": "<app-client-secret>",
+  "subscriptionId": "<subscription-id>",
+  "tenantId": "<tenant-id>"
+}
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+## AKS Deployment Notes
 
-4. **Configure environment**
+The Kubernetes deployment includes:
 
-   ```bash
-   cp .env.example .env
-   # Edit .env and set your DATABASE_URL
-   ```
+- private image pull using `acr-secret`
+- readiness and liveness probes on `/health`
+- load-balanced service on port 80 to the app container on port 8000
 
-5. **Run the service**
+Deployment files are under:
 
-   ```bash
-   uvicorn main:app --reload --port 8000
-   ```
+- FinalProject/axion-ingestion-service/manifests/deployment.yaml
+- FinalProject/axion-ingestion-service/manifests/service.yaml
 
-   The API will be available at `http://localhost:8000`.  
-   Interactive docs at `http://localhost:8000/docs`.
+## Monitoring Notes
 
-### Docker
+Prometheus and Grafana configuration files are provided to support metrics scraping and dashboard connectivity:
+
+- FinalProject/axion-ingestion-service/manifests/monitoring/prometheus-config.yaml
+- FinalProject/axion-ingestion-service/manifests/monitoring/grafana-datasource.yaml
+
+## Local Run
 
 ```bash
-# Build the image
-docker build -t axion-ingestion-service .
-
-# Run the container
-docker run -d \
-  -p 8000:8000 \
-  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/axiondb \
-  --name axion-ingestion \
-  axion-ingestion-service
+cd FinalProject/axion-ingestion-service
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
----
+Then open:
 
-## API Reference
+- http://localhost:8000/health
+- http://localhost:8000/docs
 
-### Health Check
+## Security and Production Hardening
 
-```
-GET /health
-```
+A few important improvements still recommended before production use:
 
-**Response** `200 OK`
+- remove hardcoded database URLs from source files
+- store secrets only in GitHub or Kubernetes secret stores
+- restrict ACR and AKS permissions to least privilege
+- add application metrics and alerting rules
+- configure TLS and ingress for public exposure
 
-```json
-{ "status": "UP" }
-```
+## License
 
----
+This project is part of the Axion platform and is intended for internal delivery and deployment workflows.
 
-### Ingest Telemetry
-
-```
-POST /api/v1/telemetry/ingest
-```
-
-**Request Body**
-
-```json
-{
-  "deviceId": "DEV_001",
-  "deviceType": "MOTOR",
-  "refineryRegion": "NORTH_PLANT",
-  "timestamp": "2026-06-10T10:15:30Z",
-  "metrics": {
-    "temperature": 87.5,
-    "vibration": 6.2,
-    "current": 12.8
-  }
-}
-```
-
-**Response** `201 Created`
-
-```json
-{
-  "status": "accepted",
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "message": "Telemetry data ingested successfully"
-}
-```
-
----
-
-### Get Telemetry
-
-```
-GET /api/v1/telemetry?deviceId=DEV_001&limit=50
-```
-
-| Parameter  | Type   | Required | Default | Description                     |
-|------------|--------|----------|---------|---------------------------------|
-| `deviceId` | string | No       | —       | Filter results by device ID     |
-| `limit`    | int    | No       | 100     | Max records to return (1–1000)  |
-
-**Response** `200 OK`
-
-```json
-[
-  {
-    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "deviceId": "DEV_001",
-    "deviceType": "MOTOR",
-    "refineryRegion": "NORTH_PLANT",
-    "timestamp": "2026-06-10T10:15:30Z",
-    "temperature": 87.5,
-    "vibration": 6.2,
-    "current": 12.8,
-    "createdAt": "2026-06-10T10:15:31Z"
-  }
-]
-```
-
----
-
-## Configuration
-
-Configuration is managed via environment variables. See [`.env.example`](.env.example) for reference.
-
-| Variable       | Description                                  | Default                                            |
-|----------------|----------------------------------------------|----------------------------------------------------|
-| `DATABASE_URL` | PostgreSQL connection string                 | `postgresql://postgres:postgres@localhost:5432/axiondb` |
-
----
-
-## Project Structure
-
-```
 axion-ingestion-service/
 ├── main.py              # FastAPI app, routes, and lifespan management
 ├── config.py            # Environment-based configuration (Settings dataclass)
