@@ -17,12 +17,21 @@ env:
 
 jobs:
   build-and-push:
-    name: Build, Push & Deploy to AKS
+    name: Build, Scan, Push & Deploy to AKS
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Prisma Cloud Security Scan
+        if: ${{ secrets.PRISMA_CLOUD_URL != '' && secrets.PRISMA_CLOUD_USER != '' && secrets.PRISMA_CLOUD_PASSWORD != '' }}
+        uses: PaloAltoNetworks/prisma-cloud-scan@v1
+        with:
+          pccs_url: ${{ secrets.PRISMA_CLOUD_URL }}
+          pccs_user: ${{ secrets.PRISMA_CLOUD_USER }}
+          pccs_password: ${{ secrets.PRISMA_CLOUD_PASSWORD }}
+          scan_type: iac
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

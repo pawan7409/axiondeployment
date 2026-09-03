@@ -1,0 +1,15 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location = "eastus"
+environment = "dev"
+
+tags = {
+  project     = "axion"
+  environment = "dev"
+  managed_by  = "terraform"
+}
+
+db_admin_username = "axionadmin"
+db_admin_password = "replace-with-secure-db-password"
+
+jumpbox_admin_username = "azureuser"
+jumpbox_admin_password = "replace-with-secure-jumpbox-password"

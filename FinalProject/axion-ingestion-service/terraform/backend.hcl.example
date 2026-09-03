@@ -1,0 +1,4 @@
+resource_group_name  = "DefaultResourceGroup-CCAN"
+storage_account_name = "axionsystem343562728"
+container_name       = "axioncontainer"
+key                  = "dev.tfstate"
