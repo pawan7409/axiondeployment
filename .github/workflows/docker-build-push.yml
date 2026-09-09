@@ -89,4 +89,7 @@ jobs:
         shell: bash
         run: |
           kubectl apply -f ./FinalProject/axion-ingestion-service/manifests/deployment.yaml -n "${{ env.K8S_NAMESPACE }}"
+          kubectl set image deployment/axion-ingestion-service \
+            axion-ingestion-service=${{ env.ACR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            -n "${{ env.K8S_NAMESPACE }}"
           kubectl rollout status deployment/axion-ingestion-service -n "${{ env.K8S_NAMESPACE }}" --timeout=180s
